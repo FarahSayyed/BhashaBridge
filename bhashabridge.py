@@ -1,10 +1,6 @@
 import streamlit as st
-from dotenv import load_dotenv
 from anuvaad import BhashiniPipeline 
 import os
-
-# load environment variables from .env file
-load_dotenv()
 
 # set page configuration
 st.set_page_config(
@@ -13,9 +9,9 @@ st.set_page_config(
 
 # initialize the BhashiniPipeline
 pipeline = BhashiniPipeline(
-    api_key=os.getenv('ulca_api_key'),
-    user_id=os.getenv("ulca_userid"),
-    auth_token=os.getenv('authorization_key'),
+    api_key=st.secrets("ulca_api_key"),
+    user_id=st.secrets("ulca_userid"),
+    auth_token=st.secrets("authorization_key"),
     endpoint="https://dhruva-api.bhashini.gov.in/services/inference/pipeline"
 )
 
