@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+meta
+  name: bhasha-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bhasha-bridge
+  template:
+    meta
+      labels:
+        app: bhasha-bridge
+    spec:
+      containers:
+      - name: bhasha-bridge
+        image: bhasha-bridge:build-${BUILD_NUMBER}
+        imagePullPolicy: Never 
+        ports:
+        - containerPort: 8501
+        volumeMounts:
+        - name: streamlit-secrets
+          mountPath: /app/.streamlit/secrets.toml
+          subPath: secrets.toml
+      volumes:
+      - name: streamlit-secrets
+        secret:
+          secretName: streamlit-secrets
