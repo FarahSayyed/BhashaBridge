@@ -1,8 +1,7 @@
 import os
 import requests
 import json
-from dotenv import load_dotenv
-load_dotenv()
+from secret_key import ulca_api_key, ulca_userid, authorization_key
 
 class BhashiniPipeline:
     def __init__(self, api_key, user_id, auth_token, endpoint):
@@ -63,9 +62,9 @@ class BhashiniPipeline:
 if __name__ == "__main__":
     # initialize with your credentials and endpoint
     pipeline = BhashiniPipeline(
-        api_key=os.getenv('ulca_api_key'),
-        user_id=os.getenv("ulca_userid"),
-        auth_token=os.getenv('authorization_key'),
+        api_key=st.secrets("ulca_api_key"),
+        user_id=st.secrets("ulca_userid"),
+        auth_token=st.secrets("authorization_key"),
         endpoint="https://dhruva-api.bhashini.gov.in/services/inference/pipeline"
     )
     source_text = "This is an example of english to sanskrit translation"
