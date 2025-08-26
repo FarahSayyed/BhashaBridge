@@ -1,7 +1,7 @@
 import os
 import requests
 import json
-from secret_key import ulca_api_key, ulca_userid, authorization_key
+import streamlit as st
 
 class BhashiniPipeline:
     def __init__(self, api_key, user_id, auth_token, endpoint):
