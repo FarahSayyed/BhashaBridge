@@ -1,6 +1,6 @@
 apiVersion: apps/v1
 kind: Deployment
-metadata
+metadata:
   name: bhasha-bridge
 spec:
   replicas: 1
@@ -8,7 +8,7 @@ spec:
     matchLabels:
       app: bhasha-bridge
   template:
-    metadata
+    metadata:
       labels:
         app: bhasha-bridge
     spec:
