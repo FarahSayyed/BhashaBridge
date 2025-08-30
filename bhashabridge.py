@@ -9,9 +9,9 @@ st.set_page_config(
 
 # initialize the BhashiniPipeline
 pipeline = BhashiniPipeline(
-    api_key=st.secrets("ulca_api_key"),
-    user_id=st.secrets("ulca_userid"),
-    auth_token=st.secrets("authorization_key"),
+    api_key=st.secrets["ulca_api_key"],
+    user_id=st.secrets["ulca_userid"],
+    auth_token=st.secrets["authorization_key"],
     endpoint="https://dhruva-api.bhashini.gov.in/services/inference/pipeline"
 )
 
