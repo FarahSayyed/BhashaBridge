@@ -62,9 +62,9 @@ class BhashiniPipeline:
 if __name__ == "__main__":
     # initialize with your credentials and endpoint
     pipeline = BhashiniPipeline(
-        api_key=st.secrets("ulca_api_key"),
-        user_id=st.secrets("ulca_userid"),
-        auth_token=st.secrets("authorization_key"),
+        api_key=st.secrets["ulca_api_key"],
+        user_id=st.secrets["ulca_userid"],
+        auth_token=st.secrets["authorization_key"],
         endpoint="https://dhruva-api.bhashini.gov.in/services/inference/pipeline"
     )
     source_text = "This is an example of english to sanskrit translation"
