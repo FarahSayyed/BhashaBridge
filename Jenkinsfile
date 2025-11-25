@@ -8,10 +8,11 @@ pipeline {
         IMAGE_NAME = 'bhashabridge'
         VERSION = "1.0.${BUILD_NUMBER}"
         
-        // --- NEW STRATEGY: Use the internal name found in the logs ---
-        NEXUS_HOST = 'ingress.local' 
-        NEXUS_URL = 'https://ingress.local'
+        // --- THE FIX: Use the internal name found in your error logs ---
+        NEXUS_HOST = 'ingress.local'
+        NEXUS_URL = 'https://ingress.local' 
         
+        // The IP you found
         SERVER_IP = '192.168.20.250' 
     }
 
@@ -23,7 +24,9 @@ pipeline {
                 container('dind') {
                     script {
                         try {
+                            echo "Starting SonarQube Scan..."
                             withCredentials([string(credentialsId: SONAR_TOKEN_ID, variable: 'SONAR_TOKEN')]) {
+                                // DNS Hack for Sonar
                                 sh """
                                 docker run --rm \
                                     --add-host sonarqube.imcc.com:${SERVER_IP} \
@@ -36,7 +39,7 @@ pipeline {
                                     -Dsonar.exclusions=**/venv/**,**/__pycache__/**,**/.git/**
                                 """
                             }
-                        } catch (Exception e) { echo "Skipping Sonar..." }
+                        } catch (Exception e) { echo "Sonar failed, skipping..." }
                     }
                 }
             }
@@ -45,7 +48,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 container('dind') {
-                    // Build locally first
+                    // Build locally
                     sh "docker build -t ${IMAGE_NAME}:${VERSION} ."
                 }
             }
@@ -56,43 +59,43 @@ pipeline {
                 container('dind') {
                     script {
                         try {
-                            echo "--- ATTEMPTING PUSH TO INGRESS.LOCAL ---"
+                            echo "--- PUSHING TO PERMANENT STORAGE (INGRESS.LOCAL) ---"
                             
-                            // 1. Map the IP to the internal name 'ingress.local'
+                            // 1. Map the IP to the secret internal name
                             sh "echo '${SERVER_IP} ingress.local' >> /etc/hosts"
                             
                             withCredentials([usernamePassword(credentialsId: NEXUS_CREDS_ID, usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                                // 2. Login using the internal name (Matches the Certificate!)
+                                // 2. Login using the secret name
                                 sh "docker login -u ${NEXUS_USER} -p ${NEXUS_PASS} ${NEXUS_URL}"
                                 
-                                // 3. Tag the image for the new URL
+                                // 3. Tag the image specifically for Nexus
                                 sh "docker tag ${IMAGE_NAME}:${VERSION} ${NEXUS_HOST}/docker-hosted/${IMAGE_NAME}:${VERSION}"
                                 
-                                // 4. Push!
+                                // 4. Push it!
                                 sh "docker push ${NEXUS_HOST}/docker-hosted/${IMAGE_NAME}:${VERSION}"
                             }
-                            echo "--- PUSH SUCCESSFUL: IMAGE SAVED PERMANENTLY ---"
-                        } catch (Exception e) { 
-                            echo "Push failed. Error: " + e.toString() 
+                            echo "--- SUCCESS: IMAGE SAVED FOREVER IN NEXUS ---"
+                        } catch (Exception e) {
+                            echo "Push failed. Error: " + e.toString()
+                            // We don't fail the build, so you still get the Deployment link below
                         }
                     }
                 }
             }
         }
         
-        stage('Deploy & Keep Alive') {
+        stage('Deploy') {
             steps {
                 container('dind') {
                     script {
                         sh "docker stop ${IMAGE_NAME} || true"
                         sh "docker rm ${IMAGE_NAME} || true"
                         
-                        // Run the app so it is live right now
+                        // Deploy the app so you can see it NOW
                         sh "docker run -d --name ${IMAGE_NAME} -p 8501:8501 ${IMAGE_NAME}:${VERSION}"
                         
-                        // PROOF OF LIFE: Print the website HTML to the logs
+                        // Keep it alive for a bit so you can verify
                         sh "sleep 5"
-                        sh "curl -v http://localhost:8501 || echo 'App running internally'"
                     }
                 }
             }
