@@ -25,7 +25,7 @@ pipeline {
             steps {
                 script {
                     def scannerHome = tool 'SonarScanner' // Asking Jenkins for the tool
-                    withSonarQubeEnv('SonarQube') { // Matches the system config name
+                    withSonarQubeEnv('sonar-imcc-2401060') { // Matches the system config name
                         sh "${scannerHome}/bin/sonar-scanner \
                         -Dsonar.projectKey=${PROJECT_KEY} \
                         -Dsonar.sources=. \
