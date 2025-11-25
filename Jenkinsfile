@@ -19,28 +19,29 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
+                // Checkout must happen in the default agent
                 checkout scm
             }
         }
         
         stage('SonarQube Analysis') {
-            // TRICK: Run this stage inside a dedicated lightweight container
-            agent {
-                docker { 
-                    image 'sonarsource/sonar-scanner-cli:latest' 
-                    reuseNode true
-                }
-            }
             steps {
-                script {
-                    withSonarQubeEnv('sonar-imcc-2401060') { 
+                // SWITCH TO THE BIG CONTAINER (4GB RAM + Docker)
+                container('dind') {
+                    script {
                         withCredentials([string(credentialsId: SONAR_TOKEN_ID, variable: 'SONAR_TOKEN')]) {
-                            sh "sonar-scanner \
-                            -Dsonar.projectKey=${PROJECT_KEY} \
-                            -Dsonar.sources=. \
-                            -Dsonar.exclusions=**/venv/**,**/__pycache__/**,**/.git/** \
-                            -Dsonar.host.url=http://sonarqube.imcc.com \
-                            -Dsonar.token=${SONAR_TOKEN}" 
+                            // We manually run the scanner using Docker 
+                            // This bypasses the memory limit of the small agent entirely
+                            sh """
+                            docker run --rm \
+                                -e SONAR_HOST_URL=http://sonarqube.imcc.com \
+                                -e SONAR_TOKEN=${SONAR_TOKEN} \
+                                -v \$(pwd):/usr/src \
+                                sonarsource/sonar-scanner-cli \
+                                -Dsonar.projectKey=${PROJECT_KEY} \
+                                -Dsonar.sources=. \
+                                -Dsonar.exclusions=**/venv/**,**/__pycache__/**,**/.git/**
+                            """
                         }
                     }
                 }
@@ -49,19 +50,25 @@ pipeline {
 
         stage('Build Docker Image') {
             steps {
-                script {
-                    sh "docker build -t ${IMAGE_NAME}:${VERSION} ."
+                // SWITCH TO THE BIG CONTAINER
+                container('dind') {
+                    script {
+                        sh "docker build -t ${IMAGE_NAME}:${VERSION} ."
+                    }
                 }
             }
         }
 
         stage('Push to Nexus') {
             steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: NEXUS_CREDS_ID, usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                        sh "docker login -u ${NEXUS_USER} -p ${NEXUS_PASS} ${NEXUS_URL}"
-                        sh "docker tag ${IMAGE_NAME}:${VERSION} ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
-                        sh "docker push ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
+                // SWITCH TO THE BIG CONTAINER
+                container('dind') {
+                    script {
+                        withCredentials([usernamePassword(credentialsId: NEXUS_CREDS_ID, usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                            sh "docker login -u ${NEXUS_USER} -p ${NEXUS_PASS} ${NEXUS_URL}"
+                            sh "docker tag ${IMAGE_NAME}:${VERSION} ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
+                            sh "docker push ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
+                        }
                     }
                 }
             }
@@ -69,13 +76,16 @@ pipeline {
         
         stage('Deploy') {
             steps {
-                script {
-                    // Stop old container if running
-                    sh "docker stop ${IMAGE_NAME} || true"
-                    sh "docker rm ${IMAGE_NAME} || true"
-                    
-                    // Run new container
-                    sh "docker run -d --name ${IMAGE_NAME} -p 8501:8501 ${IMAGE_NAME}:${VERSION}"
+                // SWITCH TO THE BIG CONTAINER
+                container('dind') {
+                    script {
+                        // Stop old container if running
+                        sh "docker stop ${IMAGE_NAME} || true"
+                        sh "docker rm ${IMAGE_NAME} || true"
+                        
+                        // Run new container
+                        sh "docker run -d --name ${IMAGE_NAME} -p 8501:8501 ${IMAGE_NAME}:${VERSION}"
+                    }
                 }
             }
         }
