@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 EXPOSE 8501
 
 # Command to run your application
-CMD ["streamlit", "run", "bhashabridge.py"]
+CMD ["streamlit", "run", "bhashabridge.py", "--server.port=8501", "--server.address=0.0.0.0"]
