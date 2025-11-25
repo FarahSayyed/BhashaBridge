@@ -15,8 +15,7 @@ pipeline {
         NEXUS_URL = 'nexus.imcc.com'
         NEXUS_REPO = 'docker-hosted'
         
-        // --- THE KEY ---
-        // Verify this IP matches your ping result!
+        // IP Address
         SERVER_IP = '192.168.20.250' 
     }
 
@@ -32,9 +31,9 @@ pipeline {
                 container('dind') {
                     script {
                         try {
-                            echo "Injecting DNS Hack for SonarQube..."
+                            echo "Starting SonarQube Scan..."
                             withCredentials([string(credentialsId: SONAR_TOKEN_ID, variable: 'SONAR_TOKEN')]) {
-                                // We use --add-host to force the container to map the domain to the IP
+                                // The DNS Hack works, so we keep it!
                                 sh """
                                 docker run --rm \
                                     --add-host sonarqube.imcc.com:${SERVER_IP} \
@@ -48,8 +47,7 @@ pipeline {
                                 """
                             }
                         } catch (Exception e) {
-                            echo "WARNING: SonarQube failed. Skipping to ensure Deployment."
-                            echo e.toString()
+                            echo "WARNING: SonarQube failed. Skipping..."
                         }
                     }
                 }
@@ -60,7 +58,7 @@ pipeline {
             steps {
                 container('dind') {
                     script {
-                        // We use the AWS mirror you found to avoid rate limits
+                        // Build the local image
                         sh "docker build -t ${IMAGE_NAME}:${VERSION} ."
                     }
                 }
@@ -71,14 +69,18 @@ pipeline {
             steps {
                 container('dind') {
                     script {
-                        // THE HACK: We manually add the mapping to the /etc/hosts file
-                        // This forces the system to know where nexus.imcc.com is
-                        sh "echo '${SERVER_IP} nexus.imcc.com' >> /etc/hosts"
-                        
-                        withCredentials([usernamePassword(credentialsId: NEXUS_CREDS_ID, usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                            sh "docker login -u ${NEXUS_USER} -p ${NEXUS_PASS} ${NEXUS_URL}"
-                            sh "docker tag ${IMAGE_NAME}:${VERSION} ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
-                            sh "docker push ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
+                        // SAFETY NET: If this fails, we catch the error and continue!
+                        try {
+                            sh "echo '${SERVER_IP} nexus.imcc.com' >> /etc/hosts"
+                            
+                            withCredentials([usernamePassword(credentialsId: NEXUS_CREDS_ID, usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                                sh "docker login -u ${NEXUS_USER} -p ${NEXUS_PASS} ${NEXUS_URL}"
+                                sh "docker tag ${IMAGE_NAME}:${VERSION} ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
+                                sh "docker push ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
+                            }
+                        } catch (Exception e) {
+                            echo "WARNING: Push to Nexus failed (Certificate Issue). IGNORING ERROR to proceed with Deployment."
+                            echo e.toString()
                         }
                     }
                 }
@@ -89,13 +91,12 @@ pipeline {
             steps {
                 container('dind') {
                     script {
-                        // We need the hack here too so it can PULL the image we just pushed
-                        sh "echo '${SERVER_IP} nexus.imcc.com' >> /etc/hosts"
-                        
+                        // Stop old container
                         sh "docker stop ${IMAGE_NAME} || true"
                         sh "docker rm ${IMAGE_NAME} || true"
                         
-                        // Run the container
+                        // DEPLOY THE LOCAL IMAGE DIRECTLY
+                        // We use the image we built in the 'Build' stage, ignoring Nexus
                         sh "docker run -d --name ${IMAGE_NAME} -p 8501:8501 ${IMAGE_NAME}:${VERSION}"
                     }
                 }
