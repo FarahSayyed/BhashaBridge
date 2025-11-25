@@ -24,13 +24,16 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 script {
-                    def scannerHome = tool 'SonarScanner' // Asking Jenkins for the tool
-                    withSonarQubeEnv('sonar-imcc-2401060') { // Matches the system config name
-                        sh "${scannerHome}/bin/sonar-scanner \
-                        -Dsonar.projectKey=${PROJECT_KEY} \
-                        -Dsonar.sources=. \
-                        -Dsonar.host.url=http://sonarqube.imcc.com \
-                        -Dsonar.login=$SONAR_TOKEN" 
+                    def scannerHome = tool 'SonarScanner' 
+                    withSonarQubeEnv('sonar-imcc-2401060') { 
+                        // This block loads the secret token as a variable called SONAR_TOKEN
+                        withCredentials([string(credentialsId: SONAR_TOKEN_ID, variable: 'SONAR_TOKEN')]) {
+                            sh "${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=${PROJECT_KEY} \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=http://sonarqube.imcc.com \
+                            -Dsonar.login=${SONAR_TOKEN}" 
+                        }
                     }
                 }
             }
