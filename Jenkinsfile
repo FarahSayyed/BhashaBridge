@@ -15,8 +15,9 @@ pipeline {
         NEXUS_URL = 'nexus.imcc.com'
         NEXUS_REPO = 'docker-hosted'
         
-        // GOLDEN KEY: The IP Address you found
-        SONAR_IP_URL = 'http://192.168.20.250'
+        // --- THE KEY ---
+        // Verify this IP matches your ping result!
+        SERVER_IP = '192.168.20.250' 
     }
 
     stages {
@@ -28,16 +29,16 @@ pipeline {
         
         stage('SonarQube Analysis') {
             steps {
-                // We use the 'dind' container because it has Docker installed and 4GB RAM
                 container('dind') {
                     script {
                         try {
-                            echo "Attempting SonarQube Scan using IP Address..."
+                            echo "Injecting DNS Hack for SonarQube..."
                             withCredentials([string(credentialsId: SONAR_TOKEN_ID, variable: 'SONAR_TOKEN')]) {
-                                // We use the IP address (SONAR_IP_URL) here to bypass DNS
+                                // We use --add-host to force the container to map the domain to the IP
                                 sh """
                                 docker run --rm \
-                                    -e SONAR_HOST_URL=${SONAR_IP_URL} \
+                                    --add-host sonarqube.imcc.com:${SERVER_IP} \
+                                    -e SONAR_HOST_URL=http://sonarqube.imcc.com \
                                     -e SONAR_TOKEN=${SONAR_TOKEN} \
                                     -v \$(pwd):/usr/src \
                                     sonarsource/sonar-scanner-cli \
@@ -47,7 +48,7 @@ pipeline {
                                 """
                             }
                         } catch (Exception e) {
-                            echo "WARNING: SonarQube failed likely due to network restriction. Proceeding to Deployment."
+                            echo "WARNING: SonarQube failed. Skipping to ensure Deployment."
                             echo e.toString()
                         }
                     }
@@ -59,6 +60,7 @@ pipeline {
             steps {
                 container('dind') {
                     script {
+                        // We use the AWS mirror you found to avoid rate limits
                         sh "docker build -t ${IMAGE_NAME}:${VERSION} ."
                     }
                 }
@@ -69,6 +71,10 @@ pipeline {
             steps {
                 container('dind') {
                     script {
+                        // THE HACK: We manually add the mapping to the /etc/hosts file
+                        // This forces the system to know where nexus.imcc.com is
+                        sh "echo '${SERVER_IP} nexus.imcc.com' >> /etc/hosts"
+                        
                         withCredentials([usernamePassword(credentialsId: NEXUS_CREDS_ID, usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
                             sh "docker login -u ${NEXUS_USER} -p ${NEXUS_PASS} ${NEXUS_URL}"
                             sh "docker tag ${IMAGE_NAME}:${VERSION} ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
@@ -83,11 +89,13 @@ pipeline {
             steps {
                 container('dind') {
                     script {
-                        // Stop old container
+                        // We need the hack here too so it can PULL the image we just pushed
+                        sh "echo '${SERVER_IP} nexus.imcc.com' >> /etc/hosts"
+                        
                         sh "docker stop ${IMAGE_NAME} || true"
                         sh "docker rm ${IMAGE_NAME} || true"
                         
-                        // Run new container
+                        // Run the container
                         sh "docker run -d --name ${IMAGE_NAME} -p 8501:8501 ${IMAGE_NAME}:${VERSION}"
                     }
                 }
