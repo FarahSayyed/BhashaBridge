@@ -14,9 +14,6 @@ pipeline {
         // Nexus Details
         NEXUS_URL = 'nexus.imcc.com'
         NEXUS_REPO = 'docker-hosted'
-        
-        // --- MEMORY FIX: REDUCED TO 128MB ---
-        SONAR_SCANNER_OPTS = "-Xmx128m"
     }
 
     stages {
@@ -27,16 +24,21 @@ pipeline {
         }
         
         stage('SonarQube Analysis') {
+            // TRICK: Run this stage inside a dedicated lightweight container
+            agent {
+                docker { 
+                    image 'sonarsource/sonar-scanner-cli:latest' 
+                    reuseNode true
+                }
+            }
             steps {
                 script {
-                    def scannerHome = tool 'SonarScanner' 
                     withSonarQubeEnv('sonar-imcc-2401060') { 
                         withCredentials([string(credentialsId: SONAR_TOKEN_ID, variable: 'SONAR_TOKEN')]) {
-                            // Added exclusions to save memory by ignoring useless files
-                            sh "${scannerHome}/bin/sonar-scanner \
+                            sh "sonar-scanner \
                             -Dsonar.projectKey=${PROJECT_KEY} \
                             -Dsonar.sources=. \
-                            -Dsonar.exclusions=**/venv/**,**/__pycache__/**,**/.git/**,**/*.html \
+                            -Dsonar.exclusions=**/venv/**,**/__pycache__/**,**/.git/** \
                             -Dsonar.host.url=http://sonarqube.imcc.com \
                             -Dsonar.token=${SONAR_TOKEN}" 
                         }
