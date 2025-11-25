@@ -2,16 +2,21 @@ pipeline {
     agent any
 
     environment {
-        // These match the IDs we created in Jenkins
+        // IDs from Jenkins
         SONAR_TOKEN_ID = '2401178_SonarToken'
         NEXUS_CREDS_ID = '2401178_NexusLogin'
         
-        // Your specific details
+        // Project Details
         PROJECT_KEY = '2401178BhashaBridge'
         IMAGE_NAME = 'bhashabridge'
         VERSION = "1.0.${BUILD_NUMBER}"
+        
+        // Nexus Details
         NEXUS_URL = 'nexus.imcc.com'
-        NEXUS_REPO = 'docker-hosted' // Assuming this is the repo name
+        NEXUS_REPO = 'docker-hosted'
+        
+        // --- THE FIX: LIMIT MEMORY USAGE TO 256MB ---
+        SONAR_SCANNER_OPTS = "-Xmx256m"
     }
 
     stages {
@@ -26,13 +31,13 @@ pipeline {
                 script {
                     def scannerHome = tool 'SonarScanner' 
                     withSonarQubeEnv('sonar-imcc-2401060') { 
-                        // This block loads the secret token as a variable called SONAR_TOKEN
+                        // Load the token properly
                         withCredentials([string(credentialsId: SONAR_TOKEN_ID, variable: 'SONAR_TOKEN')]) {
                             sh "${scannerHome}/bin/sonar-scanner \
                             -Dsonar.projectKey=${PROJECT_KEY} \
                             -Dsonar.sources=. \
                             -Dsonar.host.url=http://sonarqube.imcc.com \
-                            -Dsonar.login=${SONAR_TOKEN}" 
+                            -Dsonar.token=${SONAR_TOKEN}" 
                         }
                     }
                 }
@@ -51,13 +56,8 @@ pipeline {
             steps {
                 script {
                     withCredentials([usernamePassword(credentialsId: NEXUS_CREDS_ID, usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                        // Login to Nexus Docker Registry
                         sh "docker login -u ${NEXUS_USER} -p ${NEXUS_PASS} ${NEXUS_URL}"
-                        
-                        // Tag image for Nexus
                         sh "docker tag ${IMAGE_NAME}:${VERSION} ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
-                        
-                        // Push image
                         sh "docker push ${NEXUS_URL}/${NEXUS_REPO}/${IMAGE_NAME}:${VERSION}"
                     }
                 }
@@ -67,7 +67,7 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    // Stop old container if running (ignore error if not running)
+                    // Stop old container if running
                     sh "docker stop ${IMAGE_NAME} || true"
                     sh "docker rm ${IMAGE_NAME} || true"
                     
